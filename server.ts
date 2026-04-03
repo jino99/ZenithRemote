@@ -9,36 +9,43 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const isProd = process.env.NODE_ENV === "production";
+
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST"]
-    }
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
   });
 
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || "3000", 10);
 
-  // Session middleware
-  app.use(session({
-    secret: process.env.SESSION_SECRET || "zremote-secret-key",
-    resave: false,
-    saveUninitialized: true,
-    cookie: { 
-      secure: true, // Required for SameSite=None
-      sameSite: "none", // Required for cross-origin iframe
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
-  }));
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || "zremote-secret-key",
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        // secure only in production (HTTPS); in dev HTTP it must be false
+        secure: isProd,
+        sameSite: isProd ? "none" : "lax",
+        maxAge: 24 * 60 * 60 * 1000,
+      },
+    })
+  );
 
   app.use(express.json());
 
-  // Mock SSO Routes
+  // ── Auth routes ──────────────────────────────────────────────────────────────
+
   app.get("/api/auth/me", (req, res) => {
-    if ((req.session as any).user) {
-      res.json({ user: (req.session as any).user });
+    const user = (req.session as any).user;
+    if (user) {
+      res.json({ user });
     } else {
       res.status(401).json({ error: "Not authenticated" });
     }
@@ -50,12 +57,13 @@ async function startServer() {
       uid: Math.random().toString(36).substring(7),
       email: email || "demo@zremote.com",
       displayName: name || "ZREMOTE User",
-      photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name || 'zremote'}`,
+      photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name || "zremote"}`,
       role: "Admin",
-      licenseStatus: "free"
+      licenseStatus: "free",
+      emailVerified: true,
     };
     (req.session as any).user = user;
-    res.json({ user });
+    req.session.save(() => res.json({ user }));
   });
 
   app.post("/api/auth/logout", (req, res) => {
@@ -65,73 +73,73 @@ async function startServer() {
     });
   });
 
-  // Mock SSO Redirect (Simulating Google Login)
-  app.get("/auth/google", (req, res) => {
-    // In a real app, redirect to Google
-    // Here we just redirect back to a callback with a mock code
+  // ── SSO / OAuth mock ─────────────────────────────────────────────────────────
+
+  // Simulates Google OAuth redirect
+  app.get("/auth/google", (_req, res) => {
     res.redirect("/auth/callback?code=mock_code_123");
   });
 
   app.get("/auth/callback", (req, res) => {
-    // Mock successful authentication
     const user = {
       uid: "google_" + Math.random().toString(36).substring(7),
       email: "user@gmail.com",
       displayName: "Google User",
       photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=google",
       role: "Admin",
-      licenseStatus: "free"
+      licenseStatus: "free",
+      emailVerified: true,
     };
     (req.session as any).user = user;
-    
-    // Send a script to notify the opener and close the popup
-    res.send(`
-      <html>
-        <body>
-          <script>
-            const userData = ${JSON.stringify(user)};
-            const authChannel = new BroadcastChannel('zremote_auth');
-            
-            if (window.opener) {
-              try {
-                window.opener.postMessage({ type: 'AUTH_SUCCESS', user: userData }, '*');
-              } catch (e) {
-                console.error('postMessage failed:', e);
-              }
-            }
-            
-            authChannel.postMessage({ type: 'AUTH_SUCCESS', user: userData });
-            
-            // Give some time for the message to be sent before closing
-            setTimeout(() => {
-              window.close();
-              // Fallback if window.close() is blocked
-              document.body.innerHTML = '<h1>Authentication Successful</h1><p>You can close this window now.</p>';
-            }, 500);
-          </script>
-        </body>
-      </html>
-    `);
+
+    req.session.save(() => {
+      res.send(`<!DOCTYPE html>
+<html>
+<head><title>Auth Success</title></head>
+<body>
+<script>
+  const user = ${JSON.stringify(user)};
+  const ch = new BroadcastChannel('zremote_auth');
+  ch.postMessage({ type: 'AUTH_SUCCESS', user });
+  if (window.opener) {
+    try { window.opener.postMessage({ type: 'AUTH_SUCCESS', user }, '*'); } catch(e) {}
+  }
+  setTimeout(() => {
+    ch.close();
+    window.close();
+    document.body.innerHTML = '<p style="font-family:sans-serif;text-align:center;margin-top:40px">Authentication successful. You may close this window.</p>';
+  }, 300);
+</script>
+</body>
+</html>`);
+    });
   });
 
-  // Signaling logic
-  const sessions = new Map<string, string>(); // sessionId -> password
+  // ── WebRTC signaling ─────────────────────────────────────────────────────────
+
+  // sessionId -> { password, hostSocketId }
+  const sessions = new Map<string, { password: string; hostId: string | null }>();
 
   io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
+    console.log("connected:", socket.id);
 
     socket.on("create-session", ({ sessionId, password }) => {
-      sessions.set(sessionId, password);
+      sessions.set(sessionId, { password, hostId: socket.id });
       socket.join(sessionId);
-      console.log(`Session created: ${sessionId} by ${socket.id}`);
+      console.log(`session created: ${sessionId}`);
     });
 
     socket.on("join-session", ({ sessionId, password }) => {
-      const storedPassword = sessions.get(sessionId);
-      if (storedPassword && storedPassword === password) {
+      const session = sessions.get(sessionId);
+      if (session && session.password === password) {
         socket.join(sessionId);
-        console.log(`User ${socket.id} joined session ${sessionId}`);
-        socket.to(sessionId).emit("client-joined", { clientId: socket.id });
+        console.log(`${socket.id} joined ${sessionId}`);
+        // Notify the host specifically
+        if (session.hostId) {
+          io.to(session.hostId).emit("client-joined", { clientId: socket.id });
+        } else {
+          socket.to(sessionId).emit("client-joined", { clientId: socket.id });
+        }
       } else {
         socket.emit("session-not-found");
       }
@@ -146,12 +154,19 @@ async function startServer() {
     });
 
     socket.on("disconnect", () => {
-      console.log("User disconnected:", socket.id);
+      console.log("disconnected:", socket.id);
+      // Clean up sessions where this socket was the host
+      for (const [id, s] of sessions.entries()) {
+        if (s.hostId === socket.id) {
+          sessions.delete(id);
+        }
+      }
     });
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  // ── Static / Vite middleware ─────────────────────────────────────────────────
+
+  if (!isProd) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -160,13 +175,13 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("*", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`ZenithRemote running → http://localhost:${PORT}`);
   });
 }
 

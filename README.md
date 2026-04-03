@@ -1,20 +1,48 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# ZRemote
 
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/a6caf01d-8f45-4ac1-969e-c9007e0b9d78
+Secure, zero-install, browser-native remote desktop platform built on WebRTC P2P.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js 18+
 
+```bash
+npm install
+npm run dev
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+App runs at `http://localhost:3000`
+
+## Deploy to VPS
+
+```bash
+npm install
+npm run build
+NODE_ENV=production node server.ts
+```
+
+Set these environment variables on your VPS:
+
+| Variable | Description |
+|---|---|
+| `SESSION_SECRET` | Random secret for session signing (required) |
+| `PORT` | Port to listen on (default: `3000`) |
+
+Use a reverse proxy (nginx/caddy) in front for TLS termination.
+
+### Example nginx config
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+    }
+}
+```

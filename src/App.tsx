@@ -892,8 +892,8 @@ export default function App() {
   const [isLowLatencyMode, setIsLowLatencyMode] = useState(false);
   const [streamQuality, setStreamQuality] = useState<'low' | 'medium' | 'high'>('high');
   const [recentActivity, setRecentActivity] = useState<{id: string, type: string, user: string, time: string, status: string}[]>([
-    { id: 'act-1', type: 'Remote Session', user: 'lagravineseit@gmail.com', time: '2 mins ago', status: 'Completed' },
-    { id: 'act-2', type: 'File Transfer', user: 'lagravineseit@gmail.com', time: '15 mins ago', status: 'Success' },
+    { id: 'act-1', type: 'Remote Session', user: 'admin@zremote.io', time: '2 mins ago', status: 'Completed' },
+    { id: 'act-2', type: 'File Transfer', user: 'admin@zremote.io', time: '15 mins ago', status: 'Success' },
     { id: 'act-3', type: 'Security Audit', user: 'System', time: '1 hour ago', status: 'Passed' },
   ]);
   
@@ -1357,7 +1357,7 @@ export default function App() {
     });
 
     peer.on('signal', signal => {
-      socketRef.current?.emit('signal', { sessionId: inputSessionId, signal });
+      socketRef.current?.emit('signal', { sessionId: targetSessionId, signal });
     });
 
     peer.on('stream', stream => {
