@@ -1,0 +1,7 @@
+{
+  "name": "ZREMOTE",
+  "description": "Secure, high-performance P2P remote infrastructure for technical teams.",
+  "requestFramePermissions": [
+    "display-capture"
+  ]
+}
