@@ -23,7 +23,7 @@ async function startServer() {
 
   // Session middleware
   app.use(session({
-    secret: process.env.SESSION_SECRET || "zenith-secret-key",
+    secret: process.env.SESSION_SECRET || "zremote-secret-key",
     resave: false,
     saveUninitialized: true,
     cookie: { 
@@ -34,45 +34,6 @@ async function startServer() {
   }));
 
   app.use(express.json());
-
-  // Stripe Integration
-  const stripe = process.env.STRIPE_SECRET_KEY ? new (await import("stripe")).default(process.env.STRIPE_SECRET_KEY) : null;
-
-  app.post("/api/create-checkout-session", async (req, res) => {
-    if (!stripe) {
-      return res.status(500).json({ error: "Stripe is not configured" });
-    }
-
-    const { priceId } = req.body;
-    const user = (req.session as any).user;
-
-    if (!user) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    try {
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price: priceId, // e.g., 'price_12345'
-            quantity: 1,
-          },
-        ],
-        mode: "subscription",
-        success_url: `${req.headers.origin}/?session_id={CHECKOUT_SESSION_ID}&upgrade=success`,
-        cancel_url: `${req.headers.origin}/?upgrade=cancel`,
-        customer_email: user.email,
-        metadata: {
-          userId: user.uid,
-        },
-      });
-
-      res.json({ id: session.id, url: session.url });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
 
   // Mock SSO Routes
   app.get("/api/auth/me", (req, res) => {
@@ -87,11 +48,11 @@ async function startServer() {
     const { email, name } = req.body;
     const user = {
       uid: Math.random().toString(36).substring(7),
-      email: email || "demo@zenith.com",
-      displayName: name || "Zenith User",
-      photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name || 'zenith'}`,
+      email: email || "demo@zremote.com",
+      displayName: name || "ZREMOTE User",
+      photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name || 'zremote'}`,
       role: "Admin",
-      licenseStatus: "pro"
+      licenseStatus: "free"
     };
     (req.session as any).user = user;
     res.json({ user });
@@ -119,7 +80,7 @@ async function startServer() {
       displayName: "Google User",
       photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=google",
       role: "Admin",
-      licenseStatus: "pro"
+      licenseStatus: "free"
     };
     (req.session as any).user = user;
     

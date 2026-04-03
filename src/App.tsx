@@ -336,8 +336,8 @@ const SessionSummaryModal = ({ summary, onClose }: { summary: any, onClose: () =
               <span className="text-zinc-300 font-bold">OAuth 2.0 + Dynamic Pass</span>
             </div>
             <div className="flex justify-between items-center text-sm">
-              <span className="text-zinc-500">Compliance Status</span>
-              <Badge variant="emerald">SOC2 Type II</Badge>
+              <span className="text-zinc-500">Session Integrity</span>
+              <Badge variant="emerald">Verified</Badge>
             </div>
           </div>
         </div>
@@ -510,35 +510,54 @@ const SessionToolbar = ({
     </button>
   </div>
 )
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
 const DashboardOverview = ({ 
   recentActivity,
   sessionId,
   password,
   generateSession,
   startHost,
-  userProfile,
   addLog,
   inputSessionId,
   setInputSessionId,
   inputPassword,
   setInputPassword,
   startClient,
-  isConnecting
+  isConnecting,
+  sessionHistory
 }: { 
   recentActivity: any[],
   sessionId: string,
   password: string,
   generateSession: () => void,
   startHost: () => void,
-  userProfile: any,
   addLog: (msg: string) => void,
   inputSessionId: string,
   setInputSessionId: (val: string) => void,
   inputPassword: string,
   setInputPassword: (val: string) => void,
   startClient: () => void,
-  isConnecting: boolean
+  isConnecting: boolean,
+  sessionHistory: any[]
 }) => {
+  const totalSessions = sessionHistory.length;
+  const totalData = sessionHistory.reduce((acc, s) => acc + (s.dataUsage || 0), 0);
+  const avgLatency = totalSessions > 0 ? 24 : 0; // Mocking avg latency as it's not tracked per session yet
+  
+  const stats = [
+    { label: 'Total Sessions', value: totalSessions.toString(), icon: Monitor, trend: 'Live', color: 'text-emerald-500' },
+    { label: 'Data Transferred', value: formatBytes(totalData), icon: Activity, trend: 'Live', color: 'text-blue-500' },
+    { label: 'Avg. Latency', value: `${avgLatency}ms`, icon: Zap, trend: 'Stable', color: 'text-amber-500' },
+    { label: 'Security Level', value: 'Highest', icon: Shield, trend: 'Active', color: 'text-purple-500' },
+  ];
+
   const data = [
     { name: 'Mon', sessions: 12, data: 450 },
     { name: 'Tue', sessions: 19, data: 820 },
@@ -553,12 +572,7 @@ const DashboardOverview = ({
     <div className="space-y-8">
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {[
-          { label: 'Total Sessions', value: '112', icon: Monitor, trend: '+12%', color: 'text-emerald-500' },
-          { label: 'Data Transferred', value: '4.2 GB', icon: Activity, trend: '+8%', color: 'text-blue-500' },
-          { label: 'Avg. Latency', value: '24ms', icon: Zap, trend: '-15%', color: 'text-amber-500' },
-          { label: 'Active Agents', value: '8', icon: Users, trend: 'Stable', color: 'text-purple-500' },
-        ].map((stat) => (
+        {stats.map((stat) => (
           <Card key={stat.label} className="p-6 bg-zinc-900/30 border-zinc-800 hover:border-zinc-700 transition-all group">
             <div className="flex justify-between items-start mb-4">
               <div className={cn("p-3 rounded-2xl bg-zinc-800 group-hover:scale-110 transition-transform", stat.color)}>
@@ -648,24 +662,18 @@ const DashboardOverview = ({
                 <div className="flex gap-4">
                   <button 
                     onClick={generateSession}
-                    disabled={userProfile?.role === 'Viewer'}
                     className={cn(
                       "flex-1 font-black py-5 rounded-2xl transition-all flex items-center justify-center gap-3 border uppercase tracking-widest text-xs",
-                      userProfile?.role === 'Viewer' 
-                        ? "bg-zinc-900 text-zinc-600 border-zinc-800 cursor-not-allowed" 
-                        : "bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700 hover:border-zinc-600 active:scale-95"
+                      "bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700 hover:border-zinc-600 active:scale-95"
                     )}
                   >
                     <RefreshCw className="w-4 h-4" /> New Session
                   </button>
                   <button 
                     onClick={() => startHost()}
-                    disabled={userProfile?.role === 'Viewer'}
                     className={cn(
                       "flex-[2] font-black py-5 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-[0_0_40px_rgba(16,185,129,0.2)] uppercase tracking-widest text-xs",
-                      userProfile?.role === 'Viewer'
-                        ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
-                        : "bg-emerald-500 hover:bg-emerald-400 text-black active:scale-95"
+                      "bg-emerald-500 hover:bg-emerald-400 text-black active:scale-95"
                     )}
                   >
                     <Play className="w-4 h-4 fill-current" /> Start Sharing
@@ -728,10 +736,10 @@ const DashboardOverview = ({
                 
                 <button 
                   onClick={() => startClient()}
-                  disabled={isConnecting || userProfile?.role === 'Viewer'}
+                  disabled={isConnecting}
                   className={cn(
                     "w-full font-black py-5 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-[0_0_40px_rgba(6,182,212,0.2)] uppercase tracking-widest text-xs",
-                    (isConnecting || userProfile?.role === 'Viewer')
+                    (isConnecting)
                       ? "bg-zinc-900 text-zinc-600 cursor-not-allowed"
                       : "bg-cyan-500 hover:bg-cyan-400 text-black active:scale-95"
                   )}
@@ -887,17 +895,10 @@ export default function App() {
     { id: 'act-1', type: 'Remote Session', user: 'lagravineseit@gmail.com', time: '2 mins ago', status: 'Completed' },
     { id: 'act-2', type: 'File Transfer', user: 'lagravineseit@gmail.com', time: '15 mins ago', status: 'Success' },
     { id: 'act-3', type: 'Security Audit', user: 'System', time: '1 hour ago', status: 'Passed' },
-    { id: 'act-4', type: 'Team Invite', user: 'lagravineseit@gmail.com', time: '3 hours ago', status: 'Pending' },
   ]);
   
   const [actionLogs, setActionLogs] = useState<{ id: string, action: string, timestamp: number, details?: string }[]>([]);
-  const [teamMembers, setTeamMembers] = useState<{ id: string, name: string, email: string, role: string, status: string, avatar?: string }[]>([]);
 
-  const updateMemberRole = async (memberId: string, newRole: string) => {
-    setTeamMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole } : m));
-    addLog(`Updated member role to ${newRole}`);
-  };
-  
   const [user, setUser] = useState<AppUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isMac, setIsMac] = useState(false);
@@ -909,7 +910,6 @@ export default function App() {
   const getShortcut = (key: string) => {
     return isMac ? `⌘⌥${key.toUpperCase()}` : `Ctrl+Alt+${key.toUpperCase()}`;
   };
-  const [userProfile, setUserProfile] = useState<any>(null);
   const [lastMessage, setLastMessage] = useState<Message | null>(null);
   const [showChatToast, setShowChatToast] = useState(false);
 
@@ -917,7 +917,6 @@ export default function App() {
     { label: "E2E Encryption", status: "Active", checked: true },
     { label: "Audit Logging", status: "Enabled", checked: true },
     { label: "Email Verified", status: user?.emailVerified ? "Verified" : "Pending", checked: !!user?.emailVerified },
-    { label: "Team Isolation", status: "Active", checked: true }
   ], [user?.emailVerified]);
 
   const securityScore = useMemo(() => 
@@ -926,14 +925,10 @@ export default function App() {
   
   const [selectedResource, setSelectedResource] = useState<any>(null);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showAdvancedStats, setShowAdvancedStats] = useState(false);
   const [showSessionSummary, setShowSessionSummary] = useState(false);
   const [sessionSummary, setSessionSummary] = useState<any>(null);
   const [isRecordingSession, setIsRecordingSession] = useState(false);
-  const [newMemberEmail, setNewMemberEmail] = useState('');
-  const [newMemberName, setNewMemberName] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState('Member');
   
   const socketRef = useRef<Socket | null>(null);
   const peerRef = useRef<Peer.Instance | null>(null);
@@ -1017,13 +1012,12 @@ export default function App() {
   const handleLogin = async () => {
     try {
       // Open mock SSO popup
-      const authWindow = window.open('/auth/google', 'zenith_auth', 'width=600,height=700');
+      const authWindow = window.open('/auth/google', 'zremote_auth', 'width=600,height=700');
       
       const handleMessage = (event: MessageEvent) => {
         if (event.data?.type === 'AUTH_SUCCESS') {
           const userData = event.data.user;
           setUser(userData);
-          setUserProfile(userData);
           setIsAuthReady(true);
           setView('dashboard');
           setActiveTab('home');
@@ -1043,7 +1037,6 @@ export default function App() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
-      setUserProfile(null);
       setRole('idle');
       setIsConnected(false);
       setView('website');
@@ -1072,7 +1065,6 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           setUser(data.user);
-          setUserProfile(data.user);
           setView('dashboard');
           setActiveTab('home');
         }
@@ -1090,18 +1082,12 @@ export default function App() {
       { id: 'ZN-4412', date: new Date(Date.now() - 86400000).toLocaleString(), role: 'Client', dataUsage: 0.8 },
       { id: 'ZN-1109', date: new Date(Date.now() - 172800000).toLocaleString(), role: 'Host', dataUsage: 2.5 }
     ]);
-
-    setTeamMembers([
-      { id: '1', name: 'Alex Rivera', email: 'alex@zenith.com', role: 'Admin', status: 'Online', avatar: 'https://picsum.photos/seed/alex/100/100' },
-      { id: '2', name: 'Sarah Chen', email: 'sarah@zenith.com', role: 'Member', status: 'Offline', avatar: 'https://picsum.photos/seed/sarah/100/100' },
-      { id: '3', name: 'James Wilson', email: 'james@zenith.com', role: 'Member', status: 'Online', avatar: 'https://picsum.photos/seed/james/100/100' }
-    ]);
   }, []);
 
   useEffect(() => {
     // Load history from local storage as fallback or initial state
     if (!user) {
-      const history = localStorage.getItem('zenith_history');
+      const history = localStorage.getItem('zremote_history');
       if (history) setSessionHistory(JSON.parse(history));
     }
 
@@ -1206,31 +1192,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [role, isConnected, isFullScreen, isMac]);
 
-  const addMember = () => {
-    if (!user) return;
-    setShowAddMemberModal(true);
-  };
 
-  const submitAddMember = async () => {
-    if (!newMemberEmail || !newMemberName) return;
-
-    const newMember = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: newMemberName,
-      email: newMemberEmail,
-      role: newMemberRole,
-      status: "Active",
-      addedAt: Date.now()
-    };
-    
-    setTeamMembers(prev => [...prev, newMember]);
-    addLog(`Team member ${newMemberName} invited as ${newMemberRole}`);
-    recordAction('Team Management', `Added team member: ${newMemberEmail} (${newMemberRole})`);
-    setShowAddMemberModal(false);
-    setNewMemberEmail('');
-    setNewMemberName('');
-    setNewMemberRole('Member');
-  };
 
   const generateSession = () => {
     const id = Math.floor(100000000 + Math.random() * 900000000).toString();
@@ -1490,7 +1452,7 @@ export default function App() {
     const newEntry = { id, date: new Date().toLocaleString(), role: normalizedRole, dataUsage: Math.floor(Math.random() * 1024 * 1024 * 50) };
     const updated = [newEntry, ...sessionHistory.slice(0, 9)];
     setSessionHistory(updated);
-    localStorage.setItem('zenith_history', JSON.stringify(updated));
+    localStorage.setItem('zremote_history', JSON.stringify(updated));
   };
 
   const sendMessage = () => {
@@ -1538,14 +1500,6 @@ export default function App() {
       
       peerRef.current.send(JSON.stringify(payload));
     }
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   const totalDataTransferred = sessionHistory.reduce((acc, curr: any) => acc + (curr.dataUsage || 0), 0);
@@ -1641,7 +1595,7 @@ export default function App() {
             <div className="w-8 h-8 bg-emerald-500 rounded flex items-center justify-center">
               <Zap className="w-5 h-5 text-black fill-current" />
             </div>
-            <span className="font-mono font-bold tracking-tighter text-xl uppercase">Zenith<span className="text-emerald-500">Remote</span></span>
+            <span className="font-mono font-bold tracking-tighter text-xl uppercase">Z<span className="text-emerald-500">REMOTE</span></span>
           </div>
           <nav className="hidden lg:flex items-center gap-1">
             {view === 'website' ? (
@@ -1700,9 +1654,6 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <div className="hidden sm:flex flex-col items-end">
                   <span className="text-[10px] font-bold text-white uppercase tracking-tighter">{user.displayName}</span>
-                  <Badge variant="emerald" className="mt-0.5">
-                    Enterprise License
-                  </Badge>
                 </div>
                 <button 
                   onClick={handleLogout}
@@ -1720,15 +1671,6 @@ export default function App() {
                 <LogIn className="w-3.5 h-3.5" /> Sign In
               </button>
             )}
-            <div className="flex items-center gap-2">
-              <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-zinc-700")} />
-              <span className="text-[10px] font-bold uppercase tracking-tighter text-zinc-500">
-                {isConnected ? 'Live' : 'Offline'}
-              </span>
-            </div>
-            <button className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
-              <Globe className="w-4 h-4 text-zinc-500" />
-            </button>
           </div>
         </div>
       </header>
@@ -1922,7 +1864,7 @@ export default function App() {
                     <div className="text-center space-y-4">
                       <Badge variant="emerald">Core Capabilities</Badge>
                       <h2 className="text-4xl font-bold tracking-tighter uppercase">Engineered for <span className="text-emerald-500">Performance.</span></h2>
-                      <p className="text-zinc-500 max-w-2xl mx-auto">ZenithRemote provides a suite of professional tools designed to handle the most demanding remote support scenarios.</p>
+                      <p className="text-zinc-500 max-w-2xl mx-auto">ZREMOTE provides a suite of professional tools designed to handle the most demanding remote support scenarios.</p>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2009,10 +1951,10 @@ export default function App() {
                               <div className="w-3 h-3 rounded-full bg-red-500" />
                               <div className="w-3 h-3 rounded-full bg-amber-500" />
                               <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                              <span className="ml-2 text-[10px] font-mono text-zinc-600">zenith-terminal --secure</span>
+                              <span className="ml-2 text-[10px] font-mono text-zinc-600">zremote-terminal --secure</span>
                             </div>
                             <div className="font-mono text-xs space-y-2">
-                              <p className="text-emerald-500">$ zenith init --session-id 829-102-394</p>
+                              <p className="text-emerald-500">$ zremote init --session-id 829-102-394</p>
                               <p className="text-zinc-500">Initializing WebRTC P2P Mesh...</p>
                               <p className="text-zinc-500">Handshake complete. DTLS-SRTP Enabled.</p>
                               <p className="text-emerald-400">Connection established: 12ms Latency</p>
@@ -2027,13 +1969,13 @@ export default function App() {
                   <div className="space-y-12">
                     <div className="text-center">
                       <h2 className="text-3xl font-bold uppercase tracking-tighter">Trusted by Professionals</h2>
-                      <p className="text-zinc-500">Join thousands of IT experts who switched to Zenith.</p>
+                      <p className="text-zinc-500">Join thousands of IT experts who switched to ZREMOTE.</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                       {[
                         { name: "Sarah Chen", role: "CTO @ TechCorp", text: "The zero-installation approach saved our support team hundreds of hours in onboarding. It's incredibly fast." },
                         { name: "Marcus Thorne", role: "Lead SysAdmin", text: "Finally, a remote desktop tool that doesn't feel like it was built in 1995. The UI is clean and the performance is top-tier." },
-                        { name: "Elena Rodriguez", role: "IT Consultant", text: "I use the Personal plan for my family and the Pro plan for my clients. The action logging is a lifesaver for billing." }
+                        { name: "Elena Rodriguez", role: "IT Consultant", text: "I use ZREMOTE for all my clients. The action logging is a lifesaver for billing." }
                       ].map((t) => (
                         <Card key={t.name} className="bg-zinc-900/20 border-zinc-800">
                           <p className="text-zinc-400 italic mb-6 text-sm leading-relaxed">"{t.text}"</p>
@@ -2058,9 +2000,9 @@ export default function App() {
                     </div>
                     <div className="space-y-4">
                       {[
-                        { q: "Is it really free?", a: "Yes! ZenithRemote is 100% free for everyone. No hidden fees, no subscriptions." },
+                        { q: "Is it really free?", a: "Yes! ZREMOTE is 100% free for everyone. No hidden fees, no subscriptions." },
                         { q: "How secure is the connection?", a: "We use WebRTC with DTLS and SRTP for end-to-end encryption. Your data never touches our servers." },
-                        { q: "Do I need to install anything?", a: "No. ZenithRemote runs entirely in your browser using standard web APIs." },
+                        { q: "Do I need to install anything?", a: "No. ZREMOTE runs entirely in your browser using standard web APIs." },
                         { q: "What is Action Logging?", a: "Action Logging records every major event (files shared, chat, quality changes) for audit purposes. Available to all users." }
                       ].map((faq) => (
                         <Card key={faq.q} className="bg-black/20 border-zinc-800/50">
@@ -2075,7 +2017,7 @@ export default function App() {
                   <div className="space-y-12 py-12 border-t border-zinc-900">
                     <div className="text-center space-y-4">
                       <h2 className="text-3xl font-bold uppercase tracking-tighter">Seamless Integrations</h2>
-                      <p className="text-zinc-500">ZenithRemote fits perfectly into your existing enterprise workflow.</p>
+                      <p className="text-zinc-500">ZREMOTE fits perfectly into your existing enterprise workflow.</p>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                       {[
@@ -2138,12 +2080,12 @@ export default function App() {
                     <div className="text-center space-y-4">
                       <Badge variant="emerald">Case Studies</Badge>
                       <h2 className="text-4xl font-bold tracking-tighter uppercase">Success <span className="text-emerald-500">Stories.</span></h2>
-                      <p className="text-zinc-500 max-w-2xl mx-auto">See how leading organizations use ZenithRemote to transform their support operations.</p>
+                      <p className="text-zinc-500 max-w-2xl mx-auto">See how leading organizations use ZREMOTE to transform their support operations.</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                       {[
                         { company: "Global FinTech", title: "Reducing Support Resolution Time by 45%", desc: "By switching to our zero-install platform, their Tier 1 support team eliminated software installation hurdles for clients.", stat: "-45% Time" },
-                        { company: "HealthTech Corp", title: "Secure Remote Access for HIPAA Compliance", desc: "Implementing ZenithRemote's E2E encryption allowed their technicians to support medical devices securely.", stat: "100% Secure" }
+                        { company: "HealthTech Corp", title: "Secure Remote Access for HIPAA Compliance", desc: "Implementing ZREMOTE's E2E encryption allowed their technicians to support medical devices securely.", stat: "100% Secure" }
                       ].map((caseStudy) => (
                         <Card key={caseStudy.company} className="p-8 space-y-6 bg-zinc-900/20">
                           <div className="flex justify-between items-center">
@@ -2168,7 +2110,7 @@ export default function App() {
                         Ready to empower <br /> your support team?
                       </h2>
                       <p className="text-emerald-900 font-medium max-w-xl mx-auto">
-                        Join over 5,000 companies that trust ZenithRemote for their critical remote access needs. Start using it for free today.
+                        Join over 5,000 companies that trust ZREMOTE for their critical remote access needs. Start using it for free today.
                       </p>
                       <div className="flex flex-col sm:flex-row justify-center gap-4">
                         <button 
@@ -2205,7 +2147,7 @@ export default function App() {
                               <div className="w-8 h-8 bg-emerald-500 rounded flex items-center justify-center">
                                 <Zap className="w-5 h-5 text-black fill-current" />
                               </div>
-                              <span className="font-mono font-bold tracking-tighter text-xl uppercase">Zenith<span className="text-emerald-500">Remote</span></span>
+                              <span className="font-mono font-bold tracking-tighter text-xl uppercase">Z<span className="text-emerald-500">REMOTE</span></span>
                             </div>
                           </div>
                           
@@ -2266,10 +2208,10 @@ export default function App() {
                                 />
                                 <button 
                                   onClick={() => startClient()}
-                                  disabled={isConnecting || userProfile?.role === 'Viewer'}
+                                  disabled={isConnecting}
                                   className={cn(
                                     "w-full py-2.5 text-black text-[10px] font-bold rounded-lg uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-                                    (isConnecting || userProfile?.role === 'Viewer')
+                                    (isConnecting)
                                       ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
                                       : "bg-cyan-500 hover:bg-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]"
                                   )}
@@ -2299,12 +2241,9 @@ export default function App() {
                               </div>
                               <button 
                                 onClick={() => startHost()}
-                                disabled={userProfile?.role === 'Viewer'}
                                 className={cn(
                                   "w-full py-2.5 text-black text-[10px] font-bold rounded-lg uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-                                  userProfile?.role === 'Viewer'
-                                    ? "bg-zinc-800 text-zinc-600 cursor-not-allowed"
-                                    : "bg-emerald-500 hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+                                  "bg-emerald-500 hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]"
                                 )}
                               >
                                 <Play className="w-3 h-3" /> Start Sharing
@@ -2336,36 +2275,7 @@ export default function App() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-4">
-                                <div className="flex flex-col items-end">
-                                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Role</span>
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant={userProfile?.role === 'Admin' ? 'emerald' : 'default'}>{(userProfile?.role || 'Member').toUpperCase()}</Badge>
-                                  </div>
-                                </div>
-                                <div className="h-10 w-px bg-zinc-800 mx-2" />
-                                <div className="flex flex-col items-end">
-                                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Current Plan</span>
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="emerald">FREE FOREVER</Badge>
-                                  </div>
-                                </div>
-                                <div className="h-10 w-px bg-zinc-800 mx-2" />
-                                <div className="flex -space-x-2">
-                                  {teamMembers.slice(0, 3).map((member) => (
-                                    <div 
-                                      key={member.id} 
-                                      className="w-8 h-8 rounded-full border-2 border-black bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-white"
-                                      title={member.name}
-                                    >
-                                      {member.name[0].toUpperCase()}
-                                    </div>
-                                  ))}
-                                  {teamMembers.length > 3 && (
-                                    <div className="w-8 h-8 rounded-full border-2 border-black bg-emerald-500 text-black flex items-center justify-center text-[10px] font-bold">
-                                      +{teamMembers.length - 3}
-                                    </div>
-                                  )}
-                                </div>
+                                {/* Status and Team sections removed for cleaner UI */}
                               </div>
                             </div>
 
@@ -2378,7 +2288,6 @@ export default function App() {
                                   password={password}
                                   generateSession={generateSession}
                                   startHost={startHost}
-                                  userProfile={userProfile}
                                   addLog={addLog}
                                   inputSessionId={inputSessionId}
                                   setInputSessionId={setInputSessionId}
@@ -2386,6 +2295,7 @@ export default function App() {
                                   setInputPassword={setInputPassword}
                                   startClient={startClient}
                                   isConnecting={isConnecting}
+                                  sessionHistory={sessionHistory}
                                 />
 
                                 {/* Core Actions: Host & Client - REMOVED FROM HERE */}
@@ -3074,26 +2984,19 @@ export default function App() {
 
                         <Card className="h-48 flex flex-col p-0 overflow-hidden border-zinc-800 bg-zinc-900/30">
                           <div className="p-3 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
-                            <h3 className="font-bold text-[10px] uppercase tracking-widest text-zinc-500">Pro Action Logs</h3>
+                            <h3 className="font-bold text-[10px] uppercase tracking-widest text-zinc-500">Action Logs</h3>
                             <Badge variant="emerald">Live</Badge>
                           </div>
                           <div className="flex-1 p-3 space-y-2 overflow-y-auto">
-                            {true ? (
-                              actionLogs.map((log) => (
-                                <div key={log.id} className="text-[9px] font-mono border-l border-emerald-500/30 pl-2 py-1">
-                                  <div className="flex justify-between text-zinc-500">
-                                    <span className="text-emerald-500 font-bold">{log.action}</span>
-                                    <span>{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
-                                  </div>
-                                  {log.details && <p className="text-zinc-600 truncate">{log.details}</p>}
+                            {actionLogs.map((log) => (
+                              <div key={log.id} className="text-[9px] font-mono border-l border-emerald-500/30 pl-2 py-1">
+                                <div className="flex justify-between text-zinc-500">
+                                  <span className="text-emerald-500 font-bold">{log.action}</span>
+                                  <span>{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
                                 </div>
-                              ))
-                            ) : (
-                              <div className="h-full flex flex-col items-center justify-center text-zinc-700 space-y-2 text-center px-4">
-                                <Lock className="w-6 h-6 opacity-20" />
-                                <p className="text-[9px] uppercase tracking-tighter">Real-time action logging and audit trails enabled.</p>
+                                {log.details && <p className="text-zinc-600 truncate">{log.details}</p>}
                               </div>
-                            )}
+                            ))}
                             {actionLogs.length === 0 && (
                               <p className="text-[9px] text-zinc-600 text-center mt-4">Waiting for actions...</p>
                             )}
@@ -3129,7 +3032,7 @@ export default function App() {
               <section>
                 <SectionHeader 
                   title="System Architecture" 
-                  subtitle="The Zenith stack is built for maximum throughput and memory safety using a distributed P2P mesh."
+                  subtitle="The ZREMOTE stack is built for maximum throughput and memory safety using a distributed P2P mesh."
                   icon={Layers}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -3153,7 +3056,7 @@ export default function App() {
                 <div className="space-y-6">
                   <h3 className="text-3xl font-bold uppercase tracking-tighter">P2P Mesh Topology</h3>
                   <p className="text-zinc-400 leading-relaxed">
-                    Unlike traditional RDP solutions that route traffic through a central relay (causing latency and security risks), ZenithRemote establishes a direct connection between the Host and Client.
+                    Unlike traditional RDP solutions that route traffic through a central relay (causing latency and security risks), ZREMOTE establishes a direct connection between the Host and Client.
                   </p>
                   <ul className="space-y-4">
                     {[
@@ -3248,7 +3151,7 @@ export default function App() {
             >
               <SectionHeader 
                 title="Security Protocol" 
-                subtitle="ZenithRemote is designed with a security-first mindset, ensuring your data never leaves your control."
+                subtitle="ZREMOTE is designed with a security-first mindset, ensuring your data never leaves your control."
                 icon={Shield}
               />
               
@@ -3294,7 +3197,7 @@ export default function App() {
                     ))}
                   </div>
                   <p className="text-zinc-500 text-sm leading-relaxed">
-                    ZenithRemote adheres to the highest international standards for data protection and privacy. Our architecture is designed to meet the rigorous requirements of healthcare, finance, and government sectors.
+                    ZREMOTE adheres to the highest international standards for data protection and privacy. Our architecture is designed to meet the rigorous requirements of healthcare, finance, and government sectors.
                   </p>
                 </div>
               </Card>
@@ -3311,17 +3214,17 @@ export default function App() {
             >
               <SectionHeader 
                 title="Resource Center" 
-                subtitle="Everything you need to deploy, manage, and scale ZenithRemote in your organization."
+                subtitle="Everything you need to deploy, manage, and scale ZREMOTE."
                 icon={BookOpen}
               />
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {[
                   { title: "Quick Start Guide", desc: "Get up and running in less than 5 minutes with our step-by-step guide.", icon: Zap, category: "Basics" },
-                  { title: "Enterprise Deployment", desc: "Best practices for deploying ZenithRemote across large-scale organizations.", icon: Building2, category: "Enterprise" },
+                  { title: "Advanced Deployment", desc: "Best practices for deploying ZREMOTE across various environments.", icon: Building2, category: "Advanced" },
                   { title: "Security Whitepaper", desc: "A deep dive into our encryption protocols and zero-trust architecture.", icon: Shield, category: "Security" },
-                  { title: "API Documentation", desc: "Integrate ZenithRemote into your own applications with our robust API.", icon: Code2, category: "Developers" },
-                  { title: "Compliance Guide", desc: "How ZenithRemote helps you meet GDPR, HIPAA, and SOC2 requirements.", icon: Clipboard, category: "Legal" },
+                  { title: "API Documentation", desc: "Integrate ZREMOTE into your own applications with our robust API.", icon: Code2, category: "Developers" },
+                  { title: "Compliance Guide", desc: "How ZREMOTE helps you meet GDPR, HIPAA, and security requirements.", icon: Clipboard, category: "Legal" },
                   { title: "Troubleshooting", desc: "Common issues and how to resolve them quickly.", icon: HelpCircle, category: "Support" }
                 ].map((res) => (
                   <Card key={res.title} className="group cursor-pointer">
@@ -3371,7 +3274,7 @@ export default function App() {
                       {selectedResource.title === "Quick Start Guide" && (
                         <div className="space-y-6">
                           <h4 className="text-emerald-400">1. Create an Account</h4>
-                          <p>Sign in using your Google account to access the dashboard. No credit card required for the Personal plan.</p>
+                          <p>Sign in using your Google account to access the dashboard. No credit card required.</p>
                           <h4 className="text-emerald-400">2. Start a Host Session</h4>
                           <p>Go to the Home tab and click "Start Host Session". You will receive a unique Session ID and Password.</p>
                           <h4 className="text-emerald-400">3. Share Credentials</h4>
@@ -3380,12 +3283,12 @@ export default function App() {
                           <p>The client enters the credentials on their dashboard and clicks "Connect". A direct P2P encrypted tunnel is established.</p>
                         </div>
                       )}
-                      {selectedResource.title === "Enterprise Deployment" && (
+                      {selectedResource.title === "Advanced Deployment" && (
                         <div className="space-y-6">
                           <h4 className="text-emerald-400">Centralized Management</h4>
-                          <p>Deploy ZenithRemote across your organization using our Team Management dashboard. Invite members, assign roles, and manage licenses from a single interface.</p>
+                          <p>Deploy ZREMOTE across your infrastructure with ease. Manage security policies from a single interface.</p>
                           <h4 className="text-emerald-400">SSO & Provisioning</h4>
-                          <p>Integrate with Okta, Azure AD, or Google Workspace for seamless user provisioning and Single Sign-On (Enterprise Plan only).</p>
+                          <p>Integrate with Okta, Azure AD, or Google Workspace for seamless user provisioning and Single Sign-On.</p>
                           <h4 className="text-emerald-400">Custom Relay Servers</h4>
                           <p>For high-security environments, deploy your own TURN/STUN servers to ensure all traffic stays within your private network infrastructure.</p>
                         </div>
@@ -3393,7 +3296,7 @@ export default function App() {
                       {selectedResource.title === "Security Whitepaper" && (
                         <div className="space-y-6">
                           <h4 className="text-emerald-400">Encryption Architecture</h4>
-                          <p>ZenithRemote utilizes the WebRTC security stack (DTLS and SRTP) to ensure all data is encrypted before leaving the browser.</p>
+                          <p>ZREMOTE utilizes the WebRTC security stack (DTLS and SRTP) to ensure all data is encrypted before leaving the browser.</p>
                           <ul className="list-disc pl-5 space-y-2">
                             <li><strong>AES-256-GCM:</strong> The gold standard for symmetric encryption, providing both confidentiality and integrity.</li>
                             <li><strong>Perfect Forward Secrecy:</strong> Session keys are ephemeral and never reused.</li>
@@ -3404,7 +3307,7 @@ export default function App() {
                       {selectedResource.title === "API Documentation" && (
                         <div className="space-y-6">
                           <h4 className="text-emerald-400">REST API Endpoints</h4>
-                          <p>Automate your workflow with our secure API. (Available for Enterprise users)</p>
+                          <p>Automate your workflow with our secure API.</p>
                           <pre className="bg-black p-4 rounded-xl text-xs overflow-x-auto">
                             {`GET /api/v1/sessions\nPOST /api/v1/sessions/create\nDELETE /api/v1/sessions/:id`}
                           </pre>
@@ -3415,7 +3318,7 @@ export default function App() {
                       {selectedResource.title === "Compliance Guide" && (
                         <div className="space-y-6">
                           <h4 className="text-emerald-400">GDPR Compliance</h4>
-                          <p>ZenithRemote is designed with privacy by default. We do not store session data, and all PII is encrypted at rest.</p>
+                          <p>ZREMOTE is designed with privacy by default. We do not store session data, and all PII is encrypted at rest.</p>
                           <h4 className="text-emerald-400">HIPAA Readiness</h4>
                           <p>Our end-to-end encryption meets the technical requirements for HIPAA compliance in healthcare environments.</p>
                           <h4 className="text-emerald-400">Audit Trails</h4>
@@ -3429,7 +3332,7 @@ export default function App() {
                           <h4 className="text-emerald-400">Performance Optimization</h4>
                           <p>Close unnecessary browser tabs and background applications. Ensure you have a stable internet connection with at least 5Mbps upload/download speed.</p>
                           <h4 className="text-emerald-400">Browser Compatibility</h4>
-                          <p>ZenithRemote is optimized for Chrome, Firefox, and Edge. Ensure your browser is updated to the latest version for the best experience.</p>
+                          <p>ZREMOTE is optimized for Chrome, Firefox, and Edge. Ensure your browser is updated to the latest version for the best experience.</p>
                         </div>
                       )}
                       {/* Fallback for other resources */}
@@ -3445,9 +3348,9 @@ export default function App() {
 
               <Card className="bg-emerald-500/5 border-emerald-500/20 p-12 text-center space-y-6">
                 <h3 className="text-3xl font-bold uppercase tracking-tighter">Need custom integration?</h3>
-                <p className="text-zinc-400 max-w-xl mx-auto">Our engineering team can help you build custom solutions tailored to your specific infrastructure needs.</p>
+                <p className="text-zinc-400 max-w-xl mx-auto">Our engineering team can help you build custom solutions tailored to your specific needs.</p>
                 <button className="px-8 py-4 bg-emerald-500 text-black font-bold rounded-xl hover:bg-emerald-400 transition-all shadow-[0_0_30px_rgba(16,185,129,0.2)]">
-                  Talk to an Engineer
+                  Get Support
                 </button>
               </Card>
             </motion.div>
@@ -3601,7 +3504,7 @@ export default function App() {
                         <p className="text-xs text-zinc-500">{user?.email}</p>
                       </div>
                     </div>
-                    <Badge variant="emerald">PROFESSIONAL</Badge>
+                    <Badge variant="emerald">FREE FOREVER</Badge>
                   </div>
                 </Card>
 
@@ -3645,7 +3548,7 @@ export default function App() {
                   <p className="text-xs text-zinc-500 mb-4">Permanently clear all session history and local cache.</p>
                   <button 
                     onClick={() => {
-                      localStorage.removeItem('zenith_history');
+                      localStorage.removeItem('zremote_history');
                       setSessionHistory([]);
                     }}
                     className="px-4 py-2 bg-red-500 text-white text-xs font-bold rounded-lg hover:bg-red-600 transition-colors disabled:bg-zinc-800 disabled:text-zinc-600"
@@ -3671,7 +3574,7 @@ export default function App() {
                     <span className="font-mono font-bold tracking-tighter text-2xl uppercase">Z<span className="text-emerald-500">REMOTE</span></span>
                   </div>
                   <p className="text-zinc-500 text-sm leading-relaxed max-w-sm">
-                    The world's first zero-installation, browser-native remote desktop platform. Secure, fast, and built for the modern enterprise.
+                    The world's first zero-installation, browser-native remote desktop platform. Secure, fast, and built for modern remote support.
                   </p>
                   <div className="flex gap-4">
                     {[Globe, Shield, Terminal, MessageSquare].map((Icon, i) => (
@@ -3706,7 +3609,7 @@ export default function App() {
                     <li><a href="#" className="hover:text-emerald-400 transition-colors">Careers</a></li>
                     <li><a href="#" className="hover:text-emerald-400 transition-colors">Privacy Policy</a></li>
                     <li><a href="#" className="hover:text-emerald-400 transition-colors">Terms of Service</a></li>
-                    <li><a href="#" className="hover:text-emerald-400 transition-colors">Contact Sales</a></li>
+                    <li><a href="#" className="hover:text-emerald-400 transition-colors">Support Center</a></li>
                   </ul>
                 </div>
               </div>
@@ -3721,7 +3624,7 @@ export default function App() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-zinc-600" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">SOC2 Type II Certified</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">E2E Encrypted & Secure</span>
                   </div>
                 </div>
               </div>
