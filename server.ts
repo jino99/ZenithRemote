@@ -89,12 +89,25 @@ async function startServer() {
       <html>
         <body>
           <script>
+            const userData = ${JSON.stringify(user)};
+            const authChannel = new BroadcastChannel('zremote_auth');
+            
             if (window.opener) {
-              window.opener.postMessage({ type: 'AUTH_SUCCESS', user: ${JSON.stringify(user)} }, '*');
-              window.close();
-            } else {
-              window.location.href = '/';
+              try {
+                window.opener.postMessage({ type: 'AUTH_SUCCESS', user: userData }, '*');
+              } catch (e) {
+                console.error('postMessage failed:', e);
+              }
             }
+            
+            authChannel.postMessage({ type: 'AUTH_SUCCESS', user: userData });
+            
+            // Give some time for the message to be sent before closing
+            setTimeout(() => {
+              window.close();
+              // Fallback if window.close() is blocked
+              document.body.innerHTML = '<h1>Authentication Successful</h1><p>You can close this window now.</p>';
+            }, 500);
           </script>
         </body>
       </html>

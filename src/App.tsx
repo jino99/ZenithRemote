@@ -1011,22 +1011,35 @@ export default function App() {
 
   const handleLogin = async () => {
     try {
-      // Open mock SSO popup
-      const authWindow = window.open('/auth/google', 'zremote_auth', 'width=600,height=700');
+      // Create a BroadcastChannel for SSO
+      const authChannel = new BroadcastChannel('zremote_auth');
       
-      const handleMessage = (event: MessageEvent) => {
+      const handleAuthSuccess = (userData: any) => {
+        setUser(userData);
+        setIsAuthReady(true);
+        setView('dashboard');
+        setActiveTab('home');
+        addLog(`Logged in as ${userData.displayName}`);
+        authChannel.close();
+        window.removeEventListener('message', handlePostMessage);
+      };
+
+      const handlePostMessage = (event: MessageEvent) => {
         if (event.data?.type === 'AUTH_SUCCESS') {
-          const userData = event.data.user;
-          setUser(userData);
-          setIsAuthReady(true);
-          setView('dashboard');
-          setActiveTab('home');
-          addLog(`Logged in as ${userData.displayName}`);
-          window.removeEventListener('message', handleMessage);
+          handleAuthSuccess(event.data.user);
+        }
+      };
+
+      authChannel.onmessage = (event) => {
+        if (event.data?.type === 'AUTH_SUCCESS') {
+          handleAuthSuccess(event.data.user);
         }
       };
       
-      window.addEventListener('message', handleMessage);
+      window.addEventListener('message', handlePostMessage);
+      
+      // Open mock SSO popup
+      window.open('/auth/google', 'zremote_auth', 'width=600,height=700');
     } catch (err) {
       console.error("Login Error:", err);
       addLog("Login failed: " + (err as Error).message);
@@ -1091,10 +1104,19 @@ export default function App() {
       if (history) setSessionHistory(JSON.parse(history));
     }
 
-    socketRef.current = io();
+    socketRef.current = io({
+      reconnectionAttempts: 5,
+      timeout: 10000,
+      transports: ['websocket', 'polling']
+    });
     
     socketRef.current.on('connect', () => {
       addLog('Signaling server connected');
+    });
+
+    socketRef.current.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+      addLog('Signaling server connection error. Falling back to polling...');
     });
 
     socketRef.current.on('disconnect', () => {
